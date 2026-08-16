@@ -1,1 +1,3 @@
 === 1M-only cold re-measure (timeout 7200s) — 2026-08-16 03:31 ===
+[03:57:33] 1M-cold | prompt_tok=986,108 | TTFT=1522.6s (prefill 648 tok/s) | decode=5.1 tok/s | passkey=HIT | finish=length
+CTX_1M_DONE

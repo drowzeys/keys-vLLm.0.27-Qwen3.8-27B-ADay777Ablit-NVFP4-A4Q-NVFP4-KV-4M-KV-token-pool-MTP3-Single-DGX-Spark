@@ -30,3 +30,13 @@ CTX_SWEEP2_DONE
 - FIRST-PASS CORRECTION: an earlier sweep sized prompts by chars (~4 chars/tok) and, without include_usage,
   logged the TARGET as prompt_tok. This filler tokenizes at ~6.9 chars/tok, so those prompts were ~57% of
   their labels (the "1M" run was really ~576K tokens). This v2 log fixes both (accurate tokens + real counts).
+
+=== 1M point (resolved) ===
+- Re-measure (context_sweep_1m.log): prompt_tok=986,108 | TTFT=1522.6s (25.4 min, 648 tok/s) | decode=5.1 tok/s | passkey=HIT.
+- CAVEAT: this 648 tok/s is WARM, not cold. The v2 cold 1M attempt ran the full 60 min (02:30->03:30) and the
+  server cached its prefill blocks before the client's 3600s timeout fired; the immediate re-measure (same unique
+  prefix) therefore hit a warm prefix cache -> 648 tok/s is impossible for cold (it beats the 500K cold point).
+- HONEST COLD 1M: ~60 min at ~274 tok/s (986,108 tok / ~3600s). That 274 tok/s sits exactly on the 50K->500K cold
+  decline (1537->1119->611->355->~274), and it is why the first attempt hit the 3600s wall right at completion.
+- REAL-WORLD 1M: warm/incremental (prefix caching reuses prior turns) ~= the 25.4 min / 648 tok/s figure.
+- RETRIEVAL: passkey HIT at 986,108 tokens -> coherence/retrieval confirmed at ~1M (not just 500K).
