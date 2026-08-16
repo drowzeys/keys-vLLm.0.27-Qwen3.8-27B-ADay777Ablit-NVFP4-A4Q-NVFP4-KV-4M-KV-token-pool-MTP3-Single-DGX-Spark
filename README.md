@@ -163,9 +163,11 @@ Single-shot **cold** prefill (unique prefix per depth → no prefix-cache reuse)
 | 98,967 | 88.4 s | 1119 | 6.4 | ✅ HIT |
 | 246,863 | 6.7 min | 611 | 5.4 | ✅ HIT |
 | 493,253 | 23.2 min | 355 | 6.8 | ✅ HIT |
-| ~1,000,000 | ~70 min (cold) | ~250 | — | see `context_sweep_1m.log` |
+| 986,108 | ~60 min cold / **25.4 min warm**\* | ~274 / 648\* | 5.1 | ✅ HIT |
 
-→ **Retrieval holds at every measured depth** (passkey HIT to 500K). Cold prefill throughput falls with context (1537 → 355 tok/s) — the O(n²) attention cost + 4096-chunked prefill — so a genuine **cold single-shot 1M prefill is ~70 min**. The **pool** trivially *holds* 1M (4.37M capacity, 4.16× at boot); real 1M use fills incrementally (prefix caching reuses prior turns), so the cold single-shot TTFT is the pessimistic bound, not the steady-state cost. *(Methodology + the first-pass tokenizer-undercount correction are documented in the log header.)*
+\* At ~1M the two regimes diverge: **cold** (first touch) ≈ 60 min / ~274 tok/s; **warm** (prefix-cache assisted — the real-world case, since prior turns are cached) = 25.4 min / 648 tok/s. Both retrieve the passkey.
+
+→ **Retrieval holds at every depth — passkey HIT all the way to ~1M (986K).** Cold prefill throughput falls smoothly with context (1537 → 355 → ~274 tok/s) — the O(n²) attention cost + 4096-chunked prefill — so a genuine **cold single-shot 1M prefill is ~60 min**. The **pool** trivially *holds* 1M (4.37M capacity, 4.16× at boot); real 1M use fills incrementally (prefix caching reuses prior turns → ~25 min effective), so the cold single-shot TTFT is the pessimistic bound, not the steady-state cost. *(Full methodology, the cold-vs-warm 1M resolution, and the first-pass tokenizer-undercount correction are documented in the log header.)*
 
 ---
 
