@@ -86,6 +86,27 @@ Both auto-warm via [`recipe/launch_champion.sh`](recipe/launch_champion.sh) + [`
 
 ---
 
+## How 1M context @ c≈4 was enabled (on a *single* Spark)
+
+The KV cache is a **shared token pool**: any mix of requests fits as long as **Σ(context lengths) ≤ pool**. So "1M context at concurrency C" needs a pool of **C × 1M** tokens. That is exactly the constraint the nvfp4-KV back-port breaks:
+
+| KV dtype | pool (GB10, aday777) | concurrency @ 1M |
+|---|--:|--:|
+| fp8 (8-bit) | ~2.1M tokens | **~2.0×** |
+| **nvfp4 (4-bit)** | **4.34M tokens** | **4.14×** ✅ |
+
+**4-bit KV halves the per-token KV footprint → doubles the pool → doubles the 1M concurrency** (2.0× → 4.14×). That is the entire reason c≈4 @ 1M fits on one 121 GB Spark. Measured: `GPU KV cache size: 4,341,760 tokens` / `Maximum concurrency for 1,048,576 tokens per request: 4.14x` (`bench/1m_profileB_serve_evidence.log`), YaRN output coherent.
+
+**The four things that had to line up** (each was a diagnosed boot failure — see [How this was built](#how-this-was-built)):
+1. **NVFP4 KV on GB10** — the FA2 sm120/121 routing back-port (PR #49891); without it GB10 rejects `--kv-cache-dtype nvfp4` and you're stuck at the fp8 ~2.1M pool (~2× @ 1M).
+2. **YaRN 4× via `--hf-overrides`** — extends Qwen3.8's 262 144 native window to 1 048 576 (the `--rope-scaling` flag was dropped in 0.27).
+3. **`--enable-prefix-caching`** — required so the Mamba/GDN state cache and the attention KV share allocator pages at 1M (Qwen3.8 is a GDN/attention hybrid).
+4. **`--max-num-batched-tokens 4096`** — the nvfp4-KV block_size is 2848; MTP auto-caps batched tokens at 2048; the Mamba-align check needs block_size ≤ batched-tokens.
+
+> **This is a *capacity* result** — the pool holds **4 full-1M sessions concurrently** (ideal for long documents already resident in KV). Actually *prefilling* 1M tokens is O(n²) attention (minutes-to-hours on one GB10), inherent to attention, not this stack. For c=8 @ full-1M you'd need an ~8M pool → TP across multiple Sparks.
+
+---
+
 ## Benchmarks (GB10, harness `bench_qwen38_tasks.py`)
 
 **nvfp4 vs fp8 KV — same model, same node** (decode tok/s, only `--kv-cache-dtype` changed):
@@ -99,7 +120,16 @@ Both auto-warm via [`recipe/launch_champion.sh`](recipe/launch_champion.sh) + [`
 | long_prose | 16.4 | 16.5 | ~0 |
 | **pool** | 2.28M | **3.93M** | **+72%** |
 
-**A4Q prefill on/off** (both nvfp4 KV): 48K +7.8% / 96K +10.1% prefill; TTFT −7 to −9%.
+**A4Q on vs off** — aday777, both nvfp4 KV, only `VLLM_NVFP4_A4Q` toggled (`bench/a4q_on_ctx.log` vs `a4q_off_ctx.log`):
+
+| ctx | prefill on | prefill off | prefill Δ | TTFT on | TTFT off | TTFT Δ | decode on | decode off |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| 4K | 2128 | 2110 | +0.9% | 2.05 s | 2.07 s | −1% | 14.2 | 18.0 |
+| 16K | 2013 | 2032 | −0.9% | 8.63 s | 8.55 s | +1% | 17.9 | 17.4 |
+| 48K | 1568 | 1455 | **+7.8%** | 33.2 s | 35.8 s | **−7.3%** | 17.1 | 16.0 |
+| 96K | 1109 | 1007 | **+10.1%** | 93.9 s | 103.3 s | **−9.2%** | 15.8 | 16.4 |
+
+→ **A4Q's win is prefill/TTFT and it scales with context** (negligible ≤16K, +8–10% / −7–9% at 48–96K, larger at 256K). **Decode is neutral** — the on/off decode deltas are within MTP-acceptance run-to-run noise (4K even shows on *lower*), confirming A4Q is a *prefill* accelerator, not a decode boost.
 **MTP sweep:** n=2 (4.07M pool), **n=3 (best)**, n=4/5 **crash**.
 **Quality:** passkey 8K/32K/96K × {50%,90%} = **6/6 PASS**.
 **vs AEON-7 BF16** (AEON's own recipe, GB10): count 12.8 / reading 9.4 / essay 7.6 → **~2.1× slower** than this NVFP4 stack.
