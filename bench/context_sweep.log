@@ -1,0 +1,32 @@
+=== Context sweep v2 (ACCURATE tokens, cold) — Profile B (.1:8081) YaRN 1M, nvfp4-KV, A4Q on, MTP-3 — 2026-08-16 01:58 ===
+[01:58:43] target~   50,000 | prompt_tok=   49,721 | TTFT=    32.3s (prefill   1537 tok/s) | decode=  6.6 tok/s | passkey=HIT | finish=length
+[02:00:19] target~  100,000 | prompt_tok=   98,967 | TTFT=    88.4s (prefill   1119 tok/s) | decode=  6.4 tok/s | passkey=HIT | finish=length
+[02:07:09] target~  250,000 | prompt_tok=  246,863 | TTFT=   404.2s (prefill    611 tok/s) | decode=  5.4 tok/s | passkey=HIT | finish=length
+[02:30:37] target~  500,000 | prompt_tok=  493,253 | TTFT=  1389.0s (prefill    355 tok/s) | decode=  6.8 tok/s | passkey=HIT | finish=length
+[03:30:39] target~1,000,000 ERROR: TimeoutError('timed out')
+
+=== SUMMARY (actual measured tokens) ===
+ prompt_tok    TTFT_s  prefill_tps  decode_tps  passkey
+     49,721      32.3         1537         6.6      HIT
+     98,967      88.4         1119         6.4      HIT
+    246,863     404.2          611         5.4      HIT
+    493,253    1389.0          355         6.8      HIT
+CTX_SWEEP2_DONE
+
+=== NOTES / methodology ===
+- Serve: Profile B on .1:8081 — YaRN 4x -> 1M max-model-len, nvfp4 KV cache, A4Q on, MTP-3,
+  --enable-prefix-caching, --max-num-batched-tokens 4096 (chunked prefill). Single DGX Spark (GB10).
+- "prompt_tok" = ACTUAL tokens (server usage.prompt_tokens via stream_options.include_usage), not a target.
+- COLD by construction: a unique lead block per depth defeats prefix-cache reuse, so TTFT reflects a true
+  first-touch prefill (worst case), not a cache hit.
+- TTFT = time to first generated token = full prefill wall-clock. prefill tok/s = prompt_tok / TTFT.
+- decode tok/s = 128 forced tokens (ignore_eos + min_tokens) so decode-at-depth is a clean, EOS-independent sample.
+- passkey: a secret code embedded at ~60% depth; HIT = model retrieved it -> coherence/retrieval holds at depth.
+- Cold prefill throughput falls steeply with context (1537 -> 355 tok/s @ 50K -> 500K); this is the O(n^2)
+  attention prefill cost + 4096-chunked prefill. A genuine cold single-shot 1M prefill is ~70 min, which
+  exceeded the 3600s client timeout on the first attempt -> re-measured with a 2h timeout in
+  bench/context_sweep_1m.log. NOTE: real-world 1M use fills context incrementally (prefix caching reuses
+  prior turns), so the cold single-shot number is the pessimistic bound, not the steady-state cost.
+- FIRST-PASS CORRECTION: an earlier sweep sized prompts by chars (~4 chars/tok) and, without include_usage,
+  logged the TARGET as prompt_tok. This filler tokenizes at ~6.9 chars/tok, so those prompts were ~57% of
+  their labels (the "1M" run was really ~576K tokens). This v2 log fixes both (accurate tokens + real counts).
