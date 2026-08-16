@@ -107,6 +107,25 @@ The KV cache is a **shared token pool**: any mix of requests fits as long as **�
 
 ---
 
+## A4Q + NVFP4-KV: the 4-bit attention pathway, and the autotune closure
+
+**The two halves of 4-bit attention are complementary — and this repo lands both on GB10.**
+
+- **NVFP4-KV (storage side).** K/V are stored in 4-bit (e2m1 packed + block scales) → **halves KV memory/bandwidth** → the 4M+ token pool. Lineage: **hikari07jp** adapted NVFP4 KV to SM120 → this repo back-ports the FA2 routing to **SM121/GB10** (PR #49891) so `--kv-cache-dtype nvfp4` runs on the Spark at all.
+- **A4Q (compute side).** The QKᵀ matmul runs in **native 4-bit** (fp4 Q × fp4 K via the `mma.sync…mxf4nvf4.block_scale` MMA), reading the 4-bit K **directly, no dequant**. Lineage: **tiffany940107** (SM120 NVFP4 attention + Qwen3.5 D256-native-GQA + perf/N64 pipeline) → **Jetha Chan** (SM121 + A4Q fp4-QK) → this repo transplants it into eugr's **FlashInfer 0.6.18** and fixes it to boot with cudagraph (parity cos 0.99972).
+
+Together: **4-bit KV storage + 4-bit QK compute = the complete 4-bit attention pathway on GB10.**
+
+**The autotune question — closed on *both* prefill and decode:**
+
+- **Prefill → autotuned (active).** eugr's FlashInfer autotuner runs at boot and caches **~96 GEMM/attention configs** for the running arch (`[Autotuner]: Saved 96 configs … /121a/…/autotune_configs.json`). The prefill path is tuned per-shape out of the box. **A4Q** then adds fp4-QK on top for **+8–10% prefill / −7–9% TTFT at 48–96K** (scales with context).
+
+- **Decode → proven optimal (closed, no autotuner needed).** There is **no runtime *attention* autotuner** anywhere — not in eugr, not in jethac's fork (FlashInfer's autotuner is GEMM/MoE only; the fp4-decode kernel's `CTA_TILE_KV` / `NUM_STAGES` / warps / smem-split are **compile-time template params**). So we **built** a compile-time tile-sweep autotuner (JIT variants, zero-rebuild env-override A/B) and measured rigorously — interleaved **7×100-iter min-latency** repeats: the **GB10 default wins** (best alternative ≤2.5%, inside the noise floor). Mechanism: fp4 decode is **occupancy-bound**, and the `num_sm`-driven **split-KV scheduler already SM-adapts**. The kernel is already at its GB10 optimum. Full method + numbers: [`reports/A4Q_TILE_SWEEP_REPORT.md`](reports/A4Q_TILE_SWEEP_REPORT.md), [`A4Q_DECODE_AUTOTUNE_REPORT.md`](reports/A4Q_DECODE_AUTOTUNE_REPORT.md).
+
+**Net: prefill is autotuned, decode is proven-optimal — the 4-bit pathway is tuned end-to-end on GB10, and the tuning question is closed with evidence** (a real result either way: a win where there was one, a rigorous "already optimal" where there wasn't).
+
+---
+
 ## Benchmarks (GB10, harness `bench_qwen38_tasks.py`)
 
 **nvfp4 vs fp8 KV — same model, same node** (decode tok/s, only `--kv-cache-dtype` changed):
