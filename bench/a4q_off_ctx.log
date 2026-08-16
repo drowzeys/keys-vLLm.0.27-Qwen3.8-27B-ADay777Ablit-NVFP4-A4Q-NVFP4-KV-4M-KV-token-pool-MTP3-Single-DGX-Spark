@@ -1,0 +1,32 @@
+== A4Q_OFF | qwen38-nvfp4
+  ctx~4K (actual 4367tok): TTFT 2070ms | prefill 2110 tok/s | decode 18.0
+  ctx~16K (actual 17367tok): TTFT 8545ms | prefill 2032 tok/s | decode 17.4
+  ctx~48K (actual 52038tok): TTFT 35776ms | prefill 1455 tok/s | decode 16.0
+  ctx~96K (actual 104038tok): TTFT 103341ms | prefill 1007 tok/s | decode 16.4
+Traceback (most recent call last):
+  File "/home/keyspark/comfy/bench_ctx_ab.py", line 75, in <module>
+    main()
+  File "/home/keyspark/comfy/bench_ctx_ab.py", line 64, in main
+    trials = [run(pr) for _ in range(2)]
+              ^^^^^^^
+  File "/home/keyspark/comfy/bench_ctx_ab.py", line 37, in run
+    with urllib.request.urlopen(req, timeout=900) as r:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 215, in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 521, in open
+    response = meth(req, response)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 630, in http_response
+    response = self.parent.error(
+               ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 559, in error
+    return self._call_chain(*args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 639, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 400: Bad Request

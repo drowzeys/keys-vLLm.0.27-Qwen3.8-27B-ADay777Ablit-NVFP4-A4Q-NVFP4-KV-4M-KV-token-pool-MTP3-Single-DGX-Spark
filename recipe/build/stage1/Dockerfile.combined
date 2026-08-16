@@ -1,0 +1,48 @@
+# Stage-1 combined overlay: FA2 NVFP4-KV on eugr 0.27 / GB10 (sm_121a)
+#   = Agent 1's merged Python (removes SM100 gate, routes nvfp4 -> FA2 for family 120)
+#   + Agent 2's linear-V-scale writer overlay (.cu, no vLLM rebuild)
+# Build:  docker build -f Dockerfile.combined -t eugr-gb10-nvfp4kv:stage1 .
+FROM eugr/spark-vllm-b12x:nightly-20260813
+
+USER root
+ENV V=/usr/local/lib/python3.12/dist-packages/vllm
+
+# --- Agent 1: merged Python (nvfp4-KV FA2 routing for device-capability-family 120) ---
+COPY v1_attention_backends_flashinfer.py $V/v1/attention/backends/flashinfer.py
+COPY utils_flashinfer.py                  $V/utils/flashinfer.py
+COPY envs.py                              $V/envs.py
+COPY compressed_tensors.py                $V/model_executor/layers/quantization/compressed_tensors/compressed_tensors.py
+# config/cache.py already has "nvfp4" in CacheDType (Agent 1: no change needed) — copy for parity
+COPY config_cache.py                      $V/config/cache.py
+
+# --- Agent 2: linear-V-scale NVFP4 writer overlay (no vLLM rebuild) ---
+ARG VLLM_COMMIT=fa033bd4e
+ENV VLLM_GB10_CSRC=/opt/vllm-src/csrc
+ENV TORCH_EXTENSIONS_DIR=/opt/torch-extensions
+ENV TORCH_CUDA_ARCH_LIST=12.1a
+
+# fa033bd4e is an eugr-fork commit (not upstream). We only need the stable-ABI
+# csrc headers, which are designed to be ABI-stable, so upstream main works.
+RUN rm -rf /opt/vllm-src \
+ && git clone --filter=blob:none https://github.com/vllm-project/vllm /opt/vllm-src \
+ && (git -C /opt/vllm-src checkout ${VLLM_COMMIT} 2>/dev/null \
+      && echo "checked out ${VLLM_COMMIT}" \
+      || echo "commit ${VLLM_COMMIT} not upstream; using main for stable-ABI csrc headers") \
+ && test -f /opt/vllm-src/csrc/core/registration.h
+
+COPY nvfp4_kv_cache_kernels.cu /opt/vllm-gb10/nvfp4_kv_cache_kernels.cu
+COPY overlay_binding.cpp        /opt/vllm-gb10/overlay_binding.cpp
+COPY vllm_gb10_nvfp4kv.py        /opt/vllm-gb10/vllm_gb10_nvfp4kv.py
+ENV PYTHONPATH=/opt/vllm-gb10:${PYTHONPATH}
+
+# NOTE: the writer overlay compiles at RUNTIME on first container start (import
+# vllm_gb10_nvfp4kv -> torch cpp_extension.load). We cannot AOT-compile during
+# `docker build` because importing vllm._C_stable_libtorch needs libcuda.so.1,
+# which is only present under the NVIDIA runtime (--gpus) at container run time.
+ENV VLLM_GB10_VERBOSE=1
+
+# Auto-activate the writer overlay when vLLM initializes CUDA (runs at runtime,
+# libcuda present). JIT-compiles the linear-V-scale kernel on first import.
+# append directly to the known path (importing vllm.platforms.cuda would need libcuda)
+RUN printf '\ntry:\n    import vllm_gb10_nvfp4kv  # GB10 NVFP4 KV linear-V-scale writer overlay\n    import logging; logging.getLogger(__name__).warning("vllm_gb10_nvfp4kv overlay ACTIVE")\nexcept Exception as _e:\n    import logging; logging.getLogger(__name__).warning("vllm_gb10_nvfp4kv overlay FAILED: %%r", _e)\n' >> "$V/platforms/cuda.py" \
+ && tail -6 "$V/platforms/cuda.py"

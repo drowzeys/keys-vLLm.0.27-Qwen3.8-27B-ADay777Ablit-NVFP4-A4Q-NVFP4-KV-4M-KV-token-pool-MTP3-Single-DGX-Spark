@@ -1,0 +1,8 @@
+== aeon7_bf16_aeonrecipe | aeon7-bf16
+-- task suite (TTFT / prefill / decode) --
+  count_structure: prompt=34tok ttft=635ms prefill=54tok/s decode=12.8tok/s
+  reading: prompt=4000tok ttft=3816ms prefill=1048tok/s decode=9.4tok/s
+  essay: prompt=37tok ttft=659ms prefill=56tok/s decode=7.6tok/s
+  list: prompt=42tok ttft=654ms prefill=64tok/s decode=7.9tok/s
+  long_prose: prompt=3999tok ttft=3846ms prefill=1040tok/s decode=7.8tok/s
+-- concurrency sweep C1-C16 (essay task) --

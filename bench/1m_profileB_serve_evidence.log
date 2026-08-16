@@ -1,0 +1,8 @@
+# 1M-context (Profile B) serve evidence — aday777 nvfp4 KV + YaRN 4x + MTP-3, single GB10
+# captured 2026-08-16 from the boot watcher (serve then stopped to free the node)
+1M HEALTHY
+(EngineCore pid=391) INFO 08-16 02:14:22 [llm_base_proposer.py:1563] Detected MTP model. Sharing target model embedding weights with the draft model.
+(EngineCore pid=391) INFO 08-16 02:14:22 [llm_base_proposer.py:1639] Detected MTP model. Sharing target model lm_head weights with the draft model.
+(EngineCore pid=391) INFO 08-16 02:18:24 [kv_cache_utils.py:2437] GPU KV cache size: 4,341,760 tokens
+(EngineCore pid=391) INFO 08-16 02:18:24 [kv_cache_utils.py:2438] Maximum concurrency for 1,048,576 tokens per request: 4.14x
+YaRN-1M reply: 'Entropy is a thermodynamic quantity that quantifies the degree of disorder or randomness in a system, representing the number of p'

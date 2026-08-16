@@ -1,0 +1,14 @@
+== aday_fp8_clean | qwen38-nvfp4
+-- task suite (TTFT / prefill / decode) --
+  count_structure: prompt=34tok ttft=328ms prefill=104tok/s decode=26.8tok/s
+  reading: prompt=4000tok ttft=1774ms prefill=2255tok/s decode=20.8tok/s
+  essay: prompt=37tok ttft=335ms prefill=110tok/s decode=17.6tok/s
+  list: prompt=42tok ttft=278ms prefill=151tok/s decode=17.0tok/s
+  long_prose: prompt=3999tok ttft=1775ms prefill=2253tok/s decode=16.4tok/s
+-- concurrency sweep C1-C16 (essay task) --
+  c=1: agg 18.2 tok/s | max_ttft 336ms
+  c=2: agg 36.3 tok/s | max_ttft 1117ms
+  c=4: agg 70.3 tok/s | max_ttft 469ms
+  c=8: agg 123.2 tok/s | max_ttft 620ms
+  c=16: agg 192.9 tok/s | max_ttft 718ms
+DONE
