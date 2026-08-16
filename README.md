@@ -153,6 +153,20 @@ Together: **4-bit KV storage + 4-bit QK compute = the complete 4-bit attention p
 **Quality:** passkey 8K/32K/96K × {50%,90%} = **6/6 PASS**.
 **vs AEON-7 BF16** (AEON's own recipe, GB10): count 12.8 / reading 9.4 / essay 7.6 → **~2.1× slower** than this NVFP4 stack.
 
+### Context sweep — cold prefill & retrieval at depth (`bench/context_sweep.log`)
+
+Single-shot **cold** prefill (unique prefix per depth → no prefix-cache reuse), server-measured tokens, decode over a forced 128-token sample, passkey embedded at ~60% depth:
+
+| context (real tokens) | TTFT = cold prefill | prefill tok/s | decode tok/s | passkey |
+|--:|--:|--:|--:|:--:|
+| 49,721 | 32.3 s | 1537 | 6.6 | ✅ HIT |
+| 98,967 | 88.4 s | 1119 | 6.4 | ✅ HIT |
+| 246,863 | 6.7 min | 611 | 5.4 | ✅ HIT |
+| 493,253 | 23.2 min | 355 | 6.8 | ✅ HIT |
+| ~1,000,000 | ~70 min (cold) | ~250 | — | see `context_sweep_1m.log` |
+
+→ **Retrieval holds at every measured depth** (passkey HIT to 500K). Cold prefill throughput falls with context (1537 → 355 tok/s) — the O(n²) attention cost + 4096-chunked prefill — so a genuine **cold single-shot 1M prefill is ~70 min**. The **pool** trivially *holds* 1M (4.37M capacity, 4.16× at boot); real 1M use fills incrementally (prefix caching reuses prior turns), so the cold single-shot TTFT is the pessimistic bound, not the steady-state cost. *(Methodology + the first-pass tokenizer-undercount correction are documented in the log header.)*
+
 ---
 
 ## ⚠️ Client note — set a high `max_tokens` (≥ 20K)
