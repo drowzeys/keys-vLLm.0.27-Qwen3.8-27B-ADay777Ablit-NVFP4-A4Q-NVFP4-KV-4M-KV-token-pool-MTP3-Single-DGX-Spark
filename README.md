@@ -155,6 +155,16 @@ Together: **4-bit KV storage + 4-bit QK compute = the complete 4-bit attention p
 
 ---
 
+## ⚠️ Client note — set a high `max_tokens` (≥ 20K)
+
+**Qwen3.8-27B (especially this abliterated build) is *very* wordy.** With a low client-side `max_tokens`, replies get cut off with `finish_reason='length'` — and when the cutoff lands inside a tool call, agent frameworks retry the truncated call and eventually bail ("Response truncated due to output length limit"). This is **not** a serving bug: the serve is streaming fine, the model just runs past a small ceiling.
+
+- **Fix:** raise your client's per-request output cap to **≥ 20,000** (`max_tokens: 20000`). Bump higher for long-form / heavy tool-loop work. The model's 1M `max-model-len` easily accommodates it.
+- **Hermes agent** users specifically: set `model.max_tokens: 20000` (or more) in `~/.hermes/config.yaml`, then restart the gateway so the change is picked up. At the old default (`8192`) this model reliably truncates mid-tool-call.
+- This is a *client* setting; the serve imposes no such limit.
+
+---
+
 ## How this was built
 
 1. **Diagnosed** that eugr 0.27 serves NVFP4-KV only via SM100 trtllm-gen — GB10 (sm_121a) rejected `--kv-cache-dtype nvfp4` outright.

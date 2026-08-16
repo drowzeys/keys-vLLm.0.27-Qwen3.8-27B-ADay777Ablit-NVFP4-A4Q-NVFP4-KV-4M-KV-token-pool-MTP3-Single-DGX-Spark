@@ -6,6 +6,11 @@
 #   bash oneshot.sh              # DEFAULT: Profile B — 1M context, c~4  (4.34M pool)
 #   PROFILE=A bash oneshot.sh    # Profile A — 256K, 15x concurrency     (3.93M pool)
 # Requires: a DGX Spark (GB10/sm_121a), Docker + NVIDIA runtime, ~60 GB free disk.
+#
+# ⚠️  CLIENT NOTE: Qwen3.8-27B (this abliterated build) is VERY wordy — set your
+#     client's per-request max_tokens to >= 20000, or replies truncate
+#     (finish_reason=length) and agent tool-calls retry-then-bail. The serve
+#     imposes no output limit; this is purely a client-side cap. (README "Client note")
 # =============================================================================
 set -euo pipefail
 
@@ -71,3 +76,12 @@ out=$(curl -s -m60 "http://localhost:$PORT/v1/chat/completions" -H 'Content-Type
   | python3 -c 'import json,sys;print(json.load(sys.stdin)["choices"][0]["message"]["content"].strip())' 2>/dev/null || true)
 [ -n "$out" ] || die "smoke test no response"
 printf '\n\033[1;32m✅ DONE.\033[0m serving at http://localhost:%s/v1  (model: qwen38-nvfp4) — replied: %s\n' "$PORT" "$out"
+
+# --- CLIENT REMINDER (do not skip) ---------------------------------------------
+printf '\n\033[1;33m⚠️  CLIENT max_tokens ≥ 20000\033[0m\n'
+printf '   Qwen3.8-27B (this abliterated build) is VERY wordy. With a low client\n'
+printf '   max_tokens it truncates (finish_reason=length); mid-tool-call that makes\n'
+printf '   agents retry-then-bail ("Response truncated due to output length limit").\n'
+printf '   Set your client cap to >= 20000 (Hermes: model.max_tokens: 20000 in\n'
+printf '   ~/.hermes/config.yaml, then restart the gateway). The serve imposes no such\n'
+printf '   limit — 1M max-model-len easily covers it. See README "Client note".\n'
