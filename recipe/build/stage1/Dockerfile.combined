@@ -39,6 +39,19 @@ ENV PYTHONPATH=/opt/vllm-gb10:${PYTHONPATH}
 # vllm_gb10_nvfp4kv -> torch cpp_extension.load). We cannot AOT-compile during
 # `docker build` because importing vllm._C_stable_libtorch needs libcuda.so.1,
 # which is only present under the NVIDIA runtime (--gpus) at container run time.
+# --- GB10 spin-wait fix (https://nacyot.github.io/artifacts/vllm-spin-wait-gb10) ---
+# vLLM SpinCondition.wait() busy-loops for busy_loop_s=1s before sleeping. Decode
+# messages arrive at millisecond intervals, so the sleep path is never taken and CPU
+# perf-cores spin at full clock burning 10-20W. On GB10 the CPU and GPU share ONE SoC
+# thermal budget, so that heat competes with the GPU. 1s -> 2ms moves waiters onto
+# kernel poll() sleep. No throughput change.
+# NOTE (measured on our fleet 2026-08-17): the large upstream win (CPU 333%->89%) needs
+# MULTIPLE ranks waiting on shm_broadcast. On a TP=1 single-GPU serve we measured no
+# significant change (93.4% -> 92.9%). Keep it: it is free, and it pays on TP>=2.
+RUN f="$V/distributed/device_communicators/shm_broadcast.py"; \
+    sed -i 's/busy_loop_s: float = 1,/busy_loop_s: float = 0.002,/' "$f" && \
+    grep -n 'busy_loop_s: float = 0.002,' "$f"
+
 ENV VLLM_GB10_VERBOSE=1
 
 # Auto-activate the writer overlay when vLLM initializes CUDA (runs at runtime,
