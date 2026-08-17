@@ -29,3 +29,8 @@ PY
 
 # GDN shape-sweep warmup (causal_conv1d + attn buckets, avoid mid-inference JIT spikes)
 python3 /home/keyspark/warm_gdn.py "http://localhost:${PORT:-8078}"
+# --- GB10 vLLM spin-wait fix (see GB10_SPIN_WAIT_PATCH.md) --------------------
+# If this script runs a stock vLLM image, the served container will busy-spin CPU
+# cores at max clock while waiting on shm_broadcast (busy_loop_s=1s default),
+# heating the shared GB10 SoC. Prefer an image built with the patch baked in.
+# https://nacyot.github.io/artifacts/vllm-spin-wait-gb10/

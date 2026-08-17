@@ -85,3 +85,8 @@ printf '   agents retry-then-bail ("Response truncated due to output length limi
 printf '   Set your client cap to >= 20000 (Hermes: model.max_tokens: 20000 in\n'
 printf '   ~/.hermes/config.yaml, then restart the gateway). The serve imposes no such\n'
 printf '   limit — 1M max-model-len easily covers it. See README "Client note".\n'
+# --- GB10 vLLM spin-wait fix (see GB10_SPIN_WAIT_PATCH.md) --------------------
+# If this script runs a stock vLLM image, the served container will busy-spin CPU
+# cores at max clock while waiting on shm_broadcast (busy_loop_s=1s default),
+# heating the shared GB10 SoC. Prefer an image built with the patch baked in.
+# https://nacyot.github.io/artifacts/vllm-spin-wait-gb10/

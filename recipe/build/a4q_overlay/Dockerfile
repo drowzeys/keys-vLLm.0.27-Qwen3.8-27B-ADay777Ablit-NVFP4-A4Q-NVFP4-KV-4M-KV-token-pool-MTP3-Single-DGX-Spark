@@ -58,3 +58,11 @@ ENV TORCH_CUDA_ARCH_LIST="12.1a"
 #     Run parity_test.py on the GB10 (needs a GPU) before trusting A4Q:
 #       docker run --rm --gpus all <image> python3 /opt/a4q/parity_test.py
 COPY overlay/parity_test.py /opt/a4q/parity_test.py
+# --- GB10 vLLM spin-wait fix -------------------------------------------------
+# https://nacyot.github.io/artifacts/vllm-spin-wait-gb10/  (see GB10_SPIN_WAIT_PATCH.md)
+# SpinCondition.wait() busy-loops 1s before sleeping; decode messages arrive every
+# few ms, so CPU cores spin at max clock burning 10-20W. On GB10 the CPU and GPU
+# share one SoC thermal budget, so that heat throttles the GPU. 1s -> 2ms.
+# Guarded: never fails the build if this image has no vLLM at that path.
+RUN f=$(find /usr/local/lib -name shm_broadcast.py -path "*device_communicators*" 2>/dev/null | head -1); \
+    if [ -n "$f" ]; then sed -i 's/busy_loop_s: float = 1,/busy_loop_s: float = 0.002,/' "$f"; fi
